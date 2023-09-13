@@ -31,7 +31,28 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 # %matplotlib inline
 from sklearn.metrics import classification_report
-from sklearn.metrics import accuracy_score
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import Normalizer
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.feature_selection import SelectKBest
+from sklearn.feature_selection import f_classif
+from numpy import set_printoptions
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, confusion_matrix, precision_score, recall_score, ConfusionMatrixDisplay
+from sklearn.model_selection import RandomizedSearchCV, train_test_split
+from scipy.stats import randint
+from sklearn.tree import export_graphviz
+from IPython.display import Image
+import graphviz
+from sklearn.datasets import make_classification
+from sklearn.neural_network import MLPClassifier
+from sklearn import linear_model
+from sklearn import model_selection
+from sklearn.svm import LinearSVC
+from sklearn.datasets import load_iris
+from sklearn.datasets import make_classification
+from sklearn.model_selection import cross_val_score
 
 """# Carga de las bases de datos"""
 
@@ -109,26 +130,21 @@ df_consolidada.describe()
 # Identificación de valores ausentes
 df_consolidada.isnull().sum()
 
-#Los datos nulos de la variable "numcompaniesworked" y "totalworkingyears" se reemplazarán por la media de los registros
+#Los datos nulos de la variable "numcompaniesworked" y "totalworkingyears" se reemplazarán por la media
 
 df_consolidada1 = df_consolidada.copy()
-
 impute_numeric_variable(df_consolidada1, "numcompaniesworked")
-
 impute_numeric_variable(df_consolidada1, "totalworkingyears")
-
+#valores nulos
 print(df_consolidada1.isnull().sum())
 
-#Los datos nulos de la variables "environmentsatisfaction", "jobsatisfaction" y "worklifebalance", serán reemplazados por la moda de los registros
+#Los datos nulos de la variables "environmentsatisfaction", "jobsatisfaction" y "worklifebalance", serán reemplazados por la moda
 
 impute_categorical_variable(df_consolidada1, "environmentsatisfaction")
-
 impute_categorical_variable(df_consolidada1, "jobsatisfaction")
-
 impute_categorical_variable(df_consolidada1, "worklifebalance")
 
-
-#Verificamos valores ausentes por columna
+#Valores nulos
 print(df_consolidada1.isnull().sum())
 
 """## **1.2 Exploración y tratamiento de la base consolidada (con retiros)**
@@ -166,15 +182,8 @@ plt.hist(df_consolidada1.jobsatisfaction,7)
 plt.xlabel('jobsatisfaction')
 plt.show()
 
-##Revisemos el comportamiento de la variable attrition
 #Histograma de variables para identificar su comportamiento
 df_consolidada1.hist(bins=50, figsize=(20,15))
-plt.show()
-
-# --- Correlation Map (Heatmap) ---
-mask = np.triu(np.ones_like(df_consolidada1.corr(), dtype=bool))
-fig, ax = plt.subplots(figsize=(10, 8))
-sns.heatmap(df_consolidada1.corr(), center = 1, mask = mask, cbar = True, annot = True, ax = ax, annot_kws={"size":8})
 plt.show()
 
 #Determinar el número de empleados por departamento
@@ -203,7 +212,7 @@ pd.crosstab(index=df_consol_retiros['department'],
 fig = px.histogram(df_consolidada1, x="yearsatcompany", color="jobsatisfaction")
 fig.show()
 
-## De los retirados de los diferentes departamentos, se realizaron de 2 a 3 capacitaciones
+## numero de capacitaciones de los retirados de los diferentes departamentos
 plt.figure(figsize = (14,9))
 sns.countplot(data=df_consol_retiros1,x="department",hue="trainingtimeslastyear")
 
@@ -234,9 +243,9 @@ fig = px.line(ret_mes, x='retirementdate', y =['employeecount'], title = '<b>Evo
               color_discrete_sequence=px.colors.qualitative.G10)
 fig.update_layout(template = 'simple_white',
                   title_x = 0.5,
-                  legend_title = 'Despidos:',
+                  legend_title = 'Retiros:',
                   xaxis_title = '<b>Fecha<b>',
-                  yaxis_title = '<b>Cantidad de casos<b>',)
+                  yaxis_title = '<b>Cantidad<b>',)
 fig.show()
 
 ret_mes
@@ -249,7 +258,7 @@ df_consol_retiros1["retirementtype"].value_counts()
 df_consol_retiros1["salaryhike"] = df_consol_retiros1['percentsalaryhike'].apply(lambda x: x/100)
 df_consol_retiros1["renuncia"] = df_consol_retiros1["retirementtype"].apply(lambda x: 0 if x != 'Resignation' else 1)
 
-## Se eliminan variables que creemos que no aportan al modelo
+## Se eliminan variables que se piensa no aportan al modelo
 df_consol_retiros1.drop(columns=['employeecount','standardhours','over18','percentsalaryhike','retirementdate','retirementtype','resignationreason'], axis= 1,inplace=True)
 
 plt.figure(figsize =(18,18))
@@ -267,11 +276,6 @@ dummies
 X= dummies.drop(["renuncia"],axis = 1)
 y = dummies.renuncia
 
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.preprocessing import StandardScaler
-from sklearn.preprocessing import Normalizer
-from sklearn.preprocessing import OneHotEncoder
-
 escalador = MinMaxScaler()
 Reescalados = escalador.fit_transform(X)
 print(Reescalados)
@@ -286,22 +290,19 @@ escalador = Normalizer().fit(X)
 Estandarizados = escalador.transform(X)
 Estandarizados
 
-"""#** Selección de modelos**"""
+"""# **4.Selección de modelos**
 
-#Crear un modelo de selección
-from sklearn.feature_selection import SelectKBest
-from sklearn.feature_selection import f_classif
-from numpy import set_printoptions
+"""
 
-#SelectKBest
+#SelectKBest para seleccionar variables
 sel_prueba = SelectKBest(score_func=f_classif, k='all')
 sel_ajustado = sel_prueba.fit(X,y)
 
-#Muestro el desempeño de los features basado en el valor F
+#Desempeño basado en el valor F
 set_printoptions(precision=3, suppress= True)
 sel_ajustado.scores_
 
-#Con base en el Select KBest, estas son las variables que se utilizarán para el modelo
+#Con base en el KBest, estas son las variables que se utilizarán para el modelo
 
 df_modelo = df_consol_retiros1[["age","employeeid","stockoptionlevel","trainingtimeslastyear","yearssincelastpromotion",
                        "yearswithcurrmanager","environmentsatisfaction","salaryhike","businesstravel",
@@ -309,36 +310,31 @@ df_modelo = df_consol_retiros1[["age","employeeid","stockoptionlevel","trainingt
 
 """## **Random Forest**"""
 
-# Otras librerias
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, confusion_matrix, precision_score, recall_score, ConfusionMatrixDisplay
-from sklearn.model_selection import RandomizedSearchCV, train_test_split
-from scipy.stats import randint
-from sklearn.tree import export_graphviz
-from IPython.display import Image
-import graphviz
-
 # datos de entrenamiento
+X_rf= X.copy()
+y_rf= y.copy()
 test_size=0.33
 seed=6
-X_train1, X_test1, Y_train1, Y_test1 = train_test_split(X, y, test_size=test_size,random_state=seed)
+X_train1_rf, X_test1_rf, Y_train1_rf, Y_test1_rf = train_test_split(X_rf, y_rf, test_size=test_size,random_state=seed)
 
 RF = RandomForestClassifier(n_estimators=100, random_state=0)
-modelo_forest= RF.fit(X_train1, Y_train1)
-#predicción
-y_pred1 = RF.predict(X_test1)
+modelo_rf= RF.fit(X_train1_rf, Y_train1_rf)
 
-accuracy = accuracy_score(Y_test1, y_pred1)
-print("Accuracy:", accuracy)
+
+##PREDICCIÓN
+y_pred1_rf = RF.predict(X_test1_rf)
+
+accuracy = accuracy_score(Y_test1_rf, y_pred1_rf)
+print( accuracy)
 
 #Matrix de confusion
 
-matrix = confusion_matrix(Y_test1, y_pred1)
+matrix = confusion_matrix(Y_test1_rf, y_pred1_rf)
 display = ConfusionMatrixDisplay(confusion_matrix = matrix)
 display.plot()
 plt.show()
 
-summary_RF = classification_report(Y_test1,y_pred1) #ramdom_forest
+summary_RF = classification_report(Y_test1_rf,y_pred1_rf)
 print(summary_RF)
 
 #Estudio de hiperparametros
@@ -355,7 +351,7 @@ rand_search = RandomizedSearchCV(rf,
                                  cv=5)
 
 # Ajustar el random search object a los datos
-rand_search.fit(X_train1, Y_train1)
+rand_search.fit(X_train1_rf, Y_train1_rf)
 
 # Crear una variable para el mejor modelo
 best_rf = rand_search.best_estimator_
@@ -363,17 +359,15 @@ best_rf = rand_search.best_estimator_
 # mejores hiperparametros
 print(rand_search.best_params_)
 
-# Crear una serie que contenga la importancia de las características del modelo y nombres de características de los datos de entrenamiento
-feature_importances = pd.Series(best_rf.feature_importances_, index=X_train1.columns).sort_values(ascending=False)
+RF1 = RandomForestClassifier(n_estimators=403, random_state=0, max_depth=6)
+modelo_rf= RF1.fit(X_train1_rf, Y_train1_rf)
+#predicción
+y_pred1_rf1 = RF1.predict(X_test1_rf)
 
-# Trazar un gráfico de barras simple
-plt.figure(figsize= (12,9))
-feature_importances.plot.bar();
+accuracy1 = accuracy_score(Y_test1_rf, y_pred1_rf)
+print(accuracy)
 
 """## **Neuronal Network**"""
-
-from sklearn.datasets import make_classification
-from sklearn.neural_network import MLPClassifier
 
 X, y = make_classification(n_samples=4000, random_state=1)
 X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=1)
@@ -397,7 +391,7 @@ kfold = KFold(n_splits=10, random_state=6, shuffle=True)
 modelo = regr
 score='roc_auc'
 resultado = cross_val_score(modelo, X, y, cv=kfold, scoring=score)
-cl2= resultado.mean()*100
+cl2= resultado.mean()
 cl2
 
 #Prediccion RN
@@ -408,13 +402,6 @@ print(accuracy_score(y_test, predictionsRN))
 print(classification_report(y_test, predictionsRN))
 
 """## **Regresión logística**"""
-
-from sklearn import linear_model
-from sklearn import model_selection
-from sklearn.metrics import classification_report
-from sklearn.metrics import confusion_matrix
-from sklearn.metrics import accuracy_score
-import matplotlib.pyplot as plt
 
 model_reg = linear_model.LogisticRegression()
 model_reg.fit(X,y)
@@ -442,15 +429,6 @@ plt.show()
 print(classification_report(Y_validation, predictionsRL))
 
 """## **SVC Linear**"""
-
-#librerias
-from sklearn.svm import LinearSVC
-from sklearn.datasets import load_iris
-from sklearn.datasets import make_classification
-from sklearn.model_selection import train_test_split
-from sklearn.model_selection import cross_val_score
-from sklearn.metrics import confusion_matrix
-from sklearn.metrics import classification_report
 
 #se pasan las variables a dummies
 modelo_dummies = pd.get_dummies(df_modelo)
@@ -495,3 +473,26 @@ plt.show()
 #Summary
 summary_CV = classification_report(ytest, ypred)
 print(summary_CV)
+
+"""# **4. Prediccion sobre el RF**"""
+
+#Se eligio el RF como el mejor
+import pickle
+archivo = 'modelo_final_rrhh.sav'
+pickle.dump(modelo_rf, open(archivo, 'wb'))
+
+#Score
+carga_rf = pickle.load(open(archivo, 'rb'))
+result = carga_rf.score(X_test1_rf, Y_test1_rf)
+print(result)
+
+import joblib
+joblib.dump(modelo_rf, "model_rf.pkl")
+modelo= joblib.load('model_rf.pkl')
+y_predict= modelo.predict(X_test1_rf)
+print(y_predict)
+
+df_predict= pd.DataFrame(y_predict)
+df_predict
+
+df_predict.value_counts()
